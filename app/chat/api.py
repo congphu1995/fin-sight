@@ -2,10 +2,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.chat.schemas import ChatRequest, ChatResponse
+from app.chat.service import ChatService
 from app.core.exceptions import LLMError
 from app.dependencies import get_chat_service
-from app.schema.chat import ChatRequest, ChatResponse
-from app.services.chat_service import ChatService
 
 router = APIRouter(tags=["chat"])
 

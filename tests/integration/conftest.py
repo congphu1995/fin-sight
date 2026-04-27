@@ -10,6 +10,11 @@ os.environ.setdefault("LOG_LEVEL", "WARNING")
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 os.environ.setdefault("GEMINI_MODEL", "gemini-flash-lite-latest")
+os.environ.setdefault("MINIO_ENDPOINT", "localhost:9000")
+os.environ.setdefault("MINIO_ACCESS_KEY", "test")
+os.environ.setdefault("MINIO_SECRET_KEY", "test")
+os.environ.setdefault("MINIO_BUCKET", "test-bucket")
+os.environ.setdefault("MINIO_SECURE", "false")
 
 from app.dependencies import get_gemini  # noqa: E402
 from app.main import app as fastapi_app  # noqa: E402
