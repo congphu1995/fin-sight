@@ -13,13 +13,19 @@ uv sync
 # First-time: copy env template, then fill in GEMINI_API_KEY
 cp .env.example .env
 
-# Postgres (matches DATABASE_URL in .env)
+# Postgres + MinIO + bucket bootstrap (matches DATABASE_URL / MINIO_* in .env)
 docker compose up -d        # start
 docker compose down         # stop (keeps data)
 docker compose down -v      # stop and wipe data
+# MinIO console: http://localhost:9001 (minioadmin/minioadmin)
 
 # Run the API (reload mode for dev)
 uv run uvicorn app.main:app --reload
+
+# Reports pipeline (idempotent; safe to re-run)
+uv run python -m app.reports                          # all enabled (source, type)
+uv run python -m app.reports --type 58 --ticker HPG   # one type, one ticker
+uv run python -m app.reports --only=extract           # single stage (after a prompt change)
 
 # Lint
 uv run ruff check .
@@ -42,7 +48,7 @@ The app is a thin layered service: **HTTP route → Service → external client 
 
 ### Dependency injection — single source of truth
 
-All FastAPI dependencies live in `app/dependencies.py` (a flat file, not a package — intentional). Long-lived objects (engine, session factory, Gemini client, settings) are `@lru_cache(maxsize=1)` singletons; per-request objects (`get_session`) are async generators that handle rollback + close. Tests override these via `app.dependency_overrides` in `tests/conftest.py` — see `FakeGeminiClient` in `tests/base.py` for the canonical pattern.
+Cross-feature singletons live in `app/dependencies.py` — engine, session factory, Gemini, MinIO, settings — all `@lru_cache(maxsize=1)`. Per-request objects (`get_session`) are async generators that handle rollback + close. Feature-local wiring (e.g. building a `ReportSource` for a given source code) lives in `app/<feature>/dependencies.py` and depends on the cross-feature file. Tests override deps via `app.dependency_overrides` in `tests/integration/conftest.py` — see `FakeGeminiClient` / `FakeMinioClient` in `tests/base.py` for the canonical pattern.
 
 The lifespan in `app/main.py` reuses the same `get_engine()` singleton from `dependencies.py` and calls `cache_clear()` after `engine.dispose()` on shutdown so a hot-reloaded process gets a fresh engine.
 
@@ -50,12 +56,15 @@ The lifespan in `app/main.py` reuses the same `get_engine()` singleton from `dep
 
 Domain exceptions live in `app/core/exceptions.py`, **not** co-located with the code that raises them. `GeminiClient.generate` raises `LLMError`; the chat route catches it and maps to `HTTPException(502)`. New domain exceptions go in `core/exceptions.py` and are imported where needed.
 
-### Schema vs. models
+### Feature layout — schemas vs. models
 
-- `app/schema/` — Pydantic models for API request/response. This is what FastAPI serializes.
-- `app/models/` — SQLAlchemy ORM (`DeclarativeBase`). Currently only `Base`; new tables go here and Alembic autogenerate picks them up via `target_metadata = Base.metadata` in `alembic/env.py`.
+The codebase is feature-based: `app/chat/`, `app/health/`, `app/reports/`. Inside each feature:
 
-These are not interchangeable. Don't import `app/models/*` into routes; routes should consume services, which can consume both.
+- `schemas.py` — Pydantic models for API request/response. This is what FastAPI serializes.
+- `models.py` (when the feature owns tables) — SQLAlchemy ORM mapped to `app/models/base.py:Base`. Alembic picks up everything bound to `Base.metadata` via `target_metadata = Base.metadata` in `alembic/env.py`.
+- `api.py`, `service.py`/`services/` — route layer + business logic.
+
+Cross-cutting infra stays under `app/core/` (LLM, DB, storage, logging, config, exceptions). API DTOs and ORM models are not interchangeable — don't import a feature's `models.py` into another feature's routes.
 
 ### Logging
 
@@ -64,6 +73,21 @@ These are not interchangeable. Don't import `app/models/*` into routes; routes s
 `app/core/logging/middleware.py` is registered in `main.py` as an HTTP middleware. It honors an incoming `X-Request-ID` header (or mints a UUID4), binds `request_id`/`method`/`path` to contextvars, and echoes the ID back in the response. This means every log line within a request is automatically correlated by `request_id` — you don't need to pass loggers around.
 
 **When to log:** boundary events (service-level start/done, lifecycle, unexpected-but-recovered). **Don't log:** inside `core/llm/` or `core/database/` (raise instead — the caller decides), inside routes (uvicorn already logs the HTTP call), or in hot loops. Log shapes (lengths, IDs), never contents (no PII).
+
+### Reports pipeline (`app/reports/`)
+
+Three idempotent stages, each gated on `Report.status`:
+`discovered → downloaded → extracted` (terminal: `duplicate`, `failed`).
+Re-runs over already-processed rows do zero work — that's the recovery model.
+
+Two registries, both **explicit**:
+- `app/reports/crawlers/` — `ReportSource` ABC + `@register` decorator.
+  New source = subclass + `@register` + INSERT into `sources`.
+- `app/reports/extraction/registry.py` — explicit dict `EXTRACTION_REGISTRY`.
+  Each `<key>/` folder pairs `schema.py` (Pydantic + `__extraction_key__` + `__version__`)
+  with `prompt.md`. New schema = mkdir + 2 files + 1 import + 1 dict line + DB row.
+
+Full design context: `docs/reports-pipeline.md` (gitignored, local only).
 
 ### Alembic
 
@@ -94,10 +118,18 @@ Rules:
 
 Run a single test:
 ```bash
-uv run pytest tests/integration/test_chat.py::test_chat_returns_fake_answer -v
+uv run pytest tests/integration/chat/test_chat.py::test_chat_returns_fake_answer -v
 uv run pytest tests/unit -q                  # unit only
 uv run pytest tests/integration -q           # integration only
 ```
+
+## Gotchas
+
+- **Gemini structured output rejects `additionalProperties`** in the JSON schema.
+  Pydantic generates that for `dict[str, T]` fields. In any model passed as
+  `response_schema` to `GeminiClient.generate_from_pdf`, use `list[NamedMetric]`
+  (where `NamedMetric{name: str, value: float}`) instead of `dict[str, float]`.
+  See `app/reports/extraction/company/schema.py` for the pattern.
 
 ## Commit messages
 
