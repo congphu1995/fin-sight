@@ -16,3 +16,6 @@ wheels/
 .idea/
 .vscode/
 .DS_Store
+
+# Local docs
+docs/
