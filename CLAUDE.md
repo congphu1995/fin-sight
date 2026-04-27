@@ -10,16 +10,24 @@ All commands run through `uv` (Python 3.12). Dependencies are in `pyproject.toml
 # Install / update deps (also creates .venv on first run)
 uv sync
 
+# First-time: copy env template, then fill in GEMINI_API_KEY
+cp .env.example .env
+
+# Postgres (matches DATABASE_URL in .env)
+docker compose up -d        # start
+docker compose down         # stop (keeps data)
+docker compose down -v      # stop and wipe data
+
 # Run the API (reload mode for dev)
 uv run uvicorn app.main:app --reload
 
 # Lint
 uv run ruff check .
 
-# Tests — full suite, single file, single test
+# Tests (see "Tests" section below for layout + single-test commands)
 uv run pytest
-uv run pytest tests/test_chat.py
-uv run pytest tests/test_chat.py::test_chat_returns_fake_answer -v
+uv run pytest tests/unit -q
+uv run pytest tests/integration -q
 
 # Alembic — URL is read from .env via app.core.config, not alembic.ini
 uv run alembic revision --autogenerate -m "description"
@@ -63,4 +71,53 @@ Async template. `alembic/env.py` calls `config.set_main_option("sqlalchemy.url",
 
 ### Tests
 
-`pytest-asyncio` in `asyncio_mode = "auto"` (configured in `pyproject.toml`), so test functions can be `async def` without decorators. `tests/conftest.py` sets safe env-var defaults **before** importing `app.main` so `Settings` doesn't try to load real secrets, and provides `client` (`httpx.AsyncClient` over `ASGITransport`) and `fake_gemini` fixtures. The `app` fixture clears `dependency_overrides` after each test.
+`pytest-asyncio` in `asyncio_mode = "auto"` (configured in `pyproject.toml`), so test functions can be `async def` without decorators.
+
+**Layout — split by what the test exercises, not by what it covers:**
+
+```
+tests/
+├── base.py                # shared utilities (e.g. FakeGeminiClient) — no fixtures
+├── unit/                  # pure, fast, no I/O — service logic with mocked clients,
+│                          # schema validation, pure functions in core/. No FastAPI app.
+└── integration/           # exercise wiring: HTTP via ASGITransport, real DB session
+    ├── conftest.py        # env-var setup BEFORE importing app.main; AsyncClient,
+    │                      # app, fake_gemini fixtures; dependency_overrides cleanup
+    └── test_*.py          # full request → response, with external clients faked
+```
+
+Rules:
+- A test that imports `app.main` or constructs an `AsyncClient` is integration. It goes in `tests/integration/`.
+- A test that instantiates a service or core class directly (no FastAPI, no real DB) is unit. It goes in `tests/unit/`.
+- Shared test doubles (like `FakeGeminiClient`) live in `tests/base.py`. Fixtures live in the relevant `conftest.py` — `tests/integration/conftest.py` for HTTP-layer fixtures.
+- Don't import from `tests/integration/` in unit tests, or vice versa.
+
+Run a single test:
+```bash
+uv run pytest tests/integration/test_chat.py::test_chat_returns_fake_answer -v
+uv run pytest tests/unit -q                  # unit only
+uv run pytest tests/integration -q           # integration only
+```
+
+## Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/): `<type>: <imperative summary>` in the title, under ~70 chars.
+
+Common types:
+
+| Type     | Use for                                                                  |
+|----------|--------------------------------------------------------------------------|
+| `feat`   | A new user-facing capability (new endpoint, new field, new flag)         |
+| `fix`    | A bug fix                                                                |
+| `refactor` | Code restructure with no behavior change                                |
+| `chore`  | Tooling, deps, build, env, infra (Dockerfile, ruff config, .gitignore)   |
+| `docs`   | Documentation only                                                       |
+| `test`   | Adding or restructuring tests, no production change                      |
+| `perf`   | Performance improvement                                                  |
+
+Guidelines:
+- **Title is the why-shaped summary**, not a file list. `feat: add request-ID propagation` not `feat: add middleware.py`.
+- **Imperative mood** ("add", "fix", "remove" — not "added"/"adds").
+- **Body only when needed** — if the title is enough, skip the body. When you do add one, explain *why*, not *what* (the diff shows what).
+- **One logical change per commit.** If you can describe two unrelated things in the message, split it.
+- Don't include "AI generated" / co-author trailers unless explicitly asked.

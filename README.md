@@ -67,14 +67,19 @@ app/
     ├── database/session.py # async engine + session factory
     └── llm/gemini.py       # Gemini client wrapper
 alembic/                    # async migrations; URL read from Settings
-tests/                      # pytest-asyncio (auto mode) + httpx AsyncClient
+tests/
+├── base.py                 # shared test doubles (e.g. FakeGeminiClient)
+├── unit/                   # pure tests, no FastAPI, no I/O
+└── integration/            # full HTTP stack via ASGITransport, faked LLM
 ```
 
 ## Development
 
 ```bash
 uv run pytest                                              # all tests
-uv run pytest tests/test_chat.py::test_chat_returns_fake_answer -v
+uv run pytest tests/unit -q                                # unit only
+uv run pytest tests/integration -q                         # integration only
+uv run pytest tests/integration/test_chat.py::test_chat_returns_fake_answer -v
 uv run ruff check .                                        # lint
 
 # Alembic — DATABASE_URL comes from .env, not alembic.ini
