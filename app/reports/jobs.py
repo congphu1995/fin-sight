@@ -52,7 +52,7 @@ async def run_pipeline(
     minio: MinioClientProtocol,
     gemini: GeminiClient,
     source_code: str | None = None,
-    type_external_id: str | None = None,
+    type_code: str | None = None,
     ticker: str | None = None,
     backfill_days: int | None = None,
     stages: tuple[Stage, ...] = ("discover", "download", "extract"),
@@ -60,7 +60,7 @@ async def run_pipeline(
 ) -> dict[tuple[str, str], StageCounts]:
     """Run the pipeline across selected (source, type) pairs.
 
-    Returns a dict keyed by (source_code, report_type_external_id) → counts.
+    Returns a dict keyed by (source_code, report_type_code) → counts.
     """
     log = logger or structlog.get_logger()
     until = date.today()
@@ -73,7 +73,7 @@ async def run_pipeline(
             sources = await _select_sources(session, source_code)
             for source in sources:
                 crawler = build_source(source.code, http, settings)
-                rtypes = await _select_types(session, source, type_external_id)
+                rtypes = await _select_types(session, source, type_code)
                 for rtype in rtypes:
                     counts = await _run_one(
                         session=session,
@@ -89,7 +89,7 @@ async def run_pipeline(
                         stages=stages,
                         logger=log,
                     )
-                    results[(source.code, rtype.external_id)] = counts
+                    results[(source.code, rtype.code)] = counts
     finally:
         await http.aclose()
     return results
@@ -105,13 +105,13 @@ async def _select_sources(session: AsyncSession, source_code: str | None) -> lis
 
 
 async def _select_types(
-    session: AsyncSession, source: Source, type_external_id: str | None
+    session: AsyncSession, source: Source, type_code: str | None
 ) -> list[ReportType]:
-    if type_external_id:
-        t = await get_report_type(session, source.id, type_external_id)
+    if type_code:
+        t = await get_report_type(session, source.id, type_code)
         if t is None:
             raise RuntimeError(
-                f"report type {type_external_id!r} not registered for source {source.code!r}"
+                f"report type {type_code!r} not registered for source {source.code!r}"
             )
         return [t]
     return await list_enabled_types(session, source.id)
@@ -193,7 +193,7 @@ async def _run_one(
                 )
             )
             await fresh.commit()
-        logger.exception("jobs.stage.failed", source=source.code, type=report_type.external_id)
+        logger.exception("jobs.stage.failed", source=source.code, type=report_type.code)
         raise
     return counts
 

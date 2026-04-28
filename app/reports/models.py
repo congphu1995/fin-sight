@@ -47,15 +47,16 @@ class ReportType(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
-    external_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Universal slug: 'company', 'industry', 'macro', ... — same meaning across sources.
+    # Doubles as the EXTRACTION_REGISTRY key. Source-specific filter values
+    # (e.g. Vietstock's '58') live inside the crawler class, not here.
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     ticker_indexed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    extraction_schema: Mapped[str] = mapped_column(String(64), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("source_id", "external_id", name="uq_report_types_source_external"),
+        UniqueConstraint("source_id", "code", name="uq_report_types_source_code"),
     )
 
 

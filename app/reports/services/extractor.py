@@ -106,7 +106,7 @@ class ExtractorService:
         if not report.pdf_object_key:
             raise ExtractionError(f"report {report.id} has no pdf_object_key")
 
-        defn = EXTRACTION_REGISTRY.get(rtype.extraction_schema)
+        defn = EXTRACTION_REGISTRY.get(rtype.code)
         if defn is None:
             defn = EXTRACTION_REGISTRY["generic"]
 

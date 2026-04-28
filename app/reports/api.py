@@ -20,21 +20,21 @@ router = APIRouter(tags=["reports"])
 async def list_reports(
     session: Annotated[AsyncSession, Depends(get_session)],
     source: str | None = None,
-    type_id: str | None = Query(default=None, alias="type"),
+    type_code: str | None = Query(default=None, alias="type"),
     ticker: str | None = None,
     status: str | None = None,
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[ReportOut]:
     stmt = (
-        select(Report, Source.code, ReportType.external_id)
+        select(Report, Source.code, ReportType.code)
         .join(Source, Source.id == Report.source_id)
         .join(ReportType, ReportType.id == Report.report_type_id)
     )
     if source:
         stmt = stmt.where(Source.code == source)
-    if type_id:
-        stmt = stmt.where(ReportType.external_id == type_id)
+    if type_code:
+        stmt = stmt.where(ReportType.code == type_code)
     if ticker:
         stmt = stmt.where(Report.ticker == ticker.upper())
     if status:
@@ -45,7 +45,7 @@ async def list_reports(
         .offset(offset)
     )
     rows = (await session.execute(stmt)).all()
-    return [_to_report_out(r, src_code, rtype_ext) for (r, src_code, rtype_ext) in rows]
+    return [_to_report_out(r, src_code, rtype_code) for (r, src_code, rtype_code) in rows]
 
 
 @router.get("/reports/{report_id}", response_model=ReportDetail)
@@ -55,7 +55,7 @@ async def get_report(
 ) -> ReportDetail:
     row = (
         await session.execute(
-            select(Report, Source.code, ReportType.external_id)
+            select(Report, Source.code, ReportType.code)
             .join(Source, Source.id == Report.source_id)
             .join(ReportType, ReportType.id == Report.report_type_id)
             .where(Report.id == report_id)
@@ -63,7 +63,7 @@ async def get_report(
     ).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Report not found")
-    report, src_code, rtype_ext = row
+    report, src_code, rtype_code = row
 
     latest = (
         await session.execute(
@@ -75,7 +75,7 @@ async def get_report(
     ).scalar_one_or_none()
 
     return ReportDetail(
-        report=_to_report_out(report, src_code, rtype_ext),
+        report=_to_report_out(report, src_code, rtype_code),
         latest_extraction=_to_extraction_out(latest) if latest else None,
     )
 
@@ -97,11 +97,11 @@ async def get_report_pdf(
     return RedirectResponse(url=url, status_code=302)
 
 
-def _to_report_out(report: Report, source_code: str, type_external_id: str) -> ReportOut:
+def _to_report_out(report: Report, source_code: str, type_code: str) -> ReportOut:
     return ReportOut(
         id=report.id,
         source_code=source_code,
-        report_type_external_id=type_external_id,
+        report_type_code=type_code,
         external_id=report.external_id,
         ticker=report.ticker,
         title=report.title,

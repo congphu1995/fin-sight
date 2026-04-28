@@ -24,7 +24,7 @@ uv run uvicorn app.main:app --reload
 
 # Reports pipeline (idempotent; safe to re-run)
 uv run python -m app.reports                          # all enabled (source, type)
-uv run python -m app.reports --type 58 --ticker HPG   # one type, one ticker
+uv run python -m app.reports --type company --ticker HPG   # one type, one ticker
 uv run python -m app.reports --only=extract           # single stage (after a prompt change)
 
 # Lint
@@ -81,11 +81,16 @@ Three idempotent stages, each gated on `Report.status`:
 Re-runs over already-processed rows do zero work — that's the recovery model.
 
 Two registries, both **explicit**:
-- `app/reports/crawlers/` — `ReportSource` ABC + `@register` decorator.
+- `app/reports/crawlers/` — `ReportSource` ABC + `@register` decorator. Source-specific
+  quirks (e.g. mapping our `code='company'` to Vietstock's `reportTypeID='58'`) live on
+  the crawler class as ClassVars (see `VietstockSource.TYPE_FILTER`), **never** as
+  source-flavored columns on `report_types`. The DB schema stays universal.
   New source = subclass + `@register` + INSERT into `sources`.
-- `app/reports/extraction/registry.py` — explicit dict `EXTRACTION_REGISTRY`.
-  Each `<key>/` folder pairs `schema.py` (Pydantic + `__extraction_key__` + `__version__`)
-  with `prompt.md`. New schema = mkdir + 2 files + 1 import + 1 dict line + DB row.
+- `app/reports/extraction/registry.py` — explicit dict `EXTRACTION_REGISTRY`, keyed
+  by the same string as `report_types.code` (the universal type slug — `'company'`,
+  `'industry'`, etc.). Each `<key>/` folder pairs `schema.py` (Pydantic +
+  `__extraction_key__` + `__version__`) with `prompt.md`.
+  New schema = mkdir + 2 files + 1 import + 1 dict line + DB row.
 
 Full design context: `docs/reports-pipeline.md` (gitignored, local only).
 

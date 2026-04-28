@@ -20,7 +20,7 @@ def test_register_rejects_duplicates() -> None:
         name = "Dup"
         base_url = "x"
 
-        def discover(self, type_external_id, since, until, ticker=None):  # type: ignore[override]
+        def discover(self, type_code, since, until, ticker=None):  # type: ignore[override]
             raise NotImplementedError
 
         async def fetch_pdf(self, report):  # type: ignore[override]

@@ -1,10 +1,10 @@
 """CLI shell for the reports pipeline.
 
-    python -m app.reports                       # full pipeline, all enabled (source, type)
-    python -m app.reports --source vietstock    # one source
-    python -m app.reports --type 58 --ticker HPG
-    python -m app.reports --skip-extraction     # discover + download only
-    python -m app.reports --only=extract        # re-extract pending downloads
+    python -m app.reports                            # full pipeline, all enabled (source, type)
+    python -m app.reports --source vietstock         # one source
+    python -m app.reports --type company --ticker HPG
+    python -m app.reports --skip-extraction          # discover + download only
+    python -m app.reports --only=extract             # re-extract pending downloads
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--source", help="Source code (e.g. 'vietstock'). Default: all enabled.")
     p.add_argument(
         "--type",
-        dest="type_external_id",
-        help="Report type external_id (e.g. '58'). Default: all enabled for the source.",
+        dest="type_code",
+        help="Report type code (e.g. 'company'). Default: all enabled for the source.",
     )
     p.add_argument(
         "--ticker",
-        help="Ticker filter (only honored for ticker_indexed types like 58).",
+        help="Ticker filter (only honored for ticker_indexed types like 'company').",
     )
     p.add_argument(
         "--backfill-days",
@@ -73,7 +73,7 @@ async def amain(argv: list[str]) -> int:
     log.info(
         "jobs.start",
         source=args.source,
-        report_type=args.type_external_id,
+        report_type=args.type_code,
         ticker=args.ticker,
         stages=list(stages_from_args(args)),
     )
@@ -83,7 +83,7 @@ async def amain(argv: list[str]) -> int:
         minio=minio,
         gemini=gemini,
         source_code=args.source,
-        type_external_id=args.type_external_id,
+        type_code=args.type_code,
         ticker=args.ticker,
         backfill_days=args.backfill_days,
         stages=stages_from_args(args),

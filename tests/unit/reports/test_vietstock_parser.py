@@ -10,7 +10,7 @@ FIXTURE_DIR = Path(__file__).parents[2] / "fixtures" / "vietstock"
 
 def test_parse_cards_extracts_featured_and_grid() -> None:
     html = (FIXTURE_DIR / "type_58_page1.html").read_text(encoding="utf-8")
-    cards = _parse_cards(html, source_code="vietstock", type_external_id="58")
+    cards = _parse_cards(html, source_code="vietstock", type_code="company")
 
     by_id = {c.external_id: c for c in cards}
     assert set(by_id) == {"19965", "19941"}
@@ -30,4 +30,4 @@ def test_parse_cards_extracts_featured_and_grid() -> None:
 
 
 def test_parse_cards_empty_html_returns_empty() -> None:
-    assert _parse_cards("", source_code="vietstock", type_external_id="58") == []
+    assert _parse_cards("", source_code="vietstock", type_code="company") == []

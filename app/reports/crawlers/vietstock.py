@@ -11,6 +11,7 @@ import contextlib
 import re
 from collections.abc import AsyncIterator
 from datetime import date, datetime
+from typing import ClassVar
 
 import httpx
 from bs4 import BeautifulSoup, Tag
@@ -31,6 +32,16 @@ class VietstockSource(ReportSource):
     LISTING_URL = f"{base_url}/bao-cao-phan-tich/phan-tich-doanh-nghiep"
     API_URL = f"{base_url}/View/ChannelEDocumentPage"
     PAGE_SIZE = 20  # server-capped
+
+    # Universal type code → Vietstock's `reportTypeID` query value.
+    # Adding a new Vietstock type = add a line here + INSERT into report_types.
+    TYPE_FILTER: ClassVar[dict[str, str]] = {
+        "technical": "49",
+        "macro": "51",
+        "industry": "57",
+        "company": "58",
+        "thematic": "59",
+    }
 
     def __init__(
         self,
@@ -61,11 +72,17 @@ class VietstockSource(ReportSource):
 
     async def discover(
         self,
-        type_external_id: str,
+        type_code: str,
         since: date,
         until: date,
         ticker: str | None = None,
     ) -> AsyncIterator[DiscoveredReport]:
+        report_type_id = self.TYPE_FILTER.get(type_code)
+        if report_type_id is None:
+            raise CrawlerError(
+                f"vietstock has no mapping for type_code {type_code!r}; "
+                f"known: {sorted(self.TYPE_FILTER)}"
+            )
         token = await self._fetch_token()
         seen: set[str] = set()
         for page in range(1, self._max_pages + 1):
@@ -75,7 +92,7 @@ class VietstockSource(ReportSource):
                 "todate": until.isoformat(),
                 "pageSize": str(self.PAGE_SIZE),
                 "__RequestVerificationToken": token,
-                "reportTypeID": type_external_id,
+                "reportTypeID": report_type_id,
                 "sourceID": "0",
                 "page": str(page),
             }
@@ -86,7 +103,7 @@ class VietstockSource(ReportSource):
                 raise CrawlerError(f"vietstock listing page {page}: {exc}") from exc
 
             cards = list(
-                _parse_cards(r.text, source_code=self.code, type_external_id=type_external_id)
+                _parse_cards(r.text, source_code=self.code, type_code=type_code)
             )
             if not cards:
                 return
@@ -108,7 +125,7 @@ class VietstockSource(ReportSource):
         return r.content
 
 
-def _parse_cards(html: str, *, source_code: str, type_external_id: str) -> list[DiscoveredReport]:
+def _parse_cards(html: str, *, source_code: str, type_code: str) -> list[DiscoveredReport]:
     """Each card is `.edoc-first` (top featured, page 1 only) or `.edoc-child` (grid).
     Both have an `a.title-link` for the title and a "Nguồn:" label preceding the source.
     The publication date appears as `dd/MM/yyyy` text inside the card."""
@@ -145,7 +162,7 @@ def _parse_cards(html: str, *, source_code: str, type_external_id: str) -> list[
         out.append(
             DiscoveredReport(
                 source_code=source_code,
-                type_external_id=type_external_id,
+                type_code=type_code,
                 external_id=rid,
                 ticker=ticker,
                 title=title,

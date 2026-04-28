@@ -82,7 +82,7 @@ class StorageService:
     async def _download_one(self, report: Report, crawler: ReportSource) -> None:
         found = DiscoveredReport(
             source_code=crawler.code,
-            type_external_id="",  # not needed for fetch_pdf
+            type_code="",  # not needed for fetch_pdf
             external_id=report.external_id,
             ticker=report.ticker,
             title=report.title,

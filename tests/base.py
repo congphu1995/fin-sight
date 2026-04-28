@@ -76,13 +76,13 @@ class FakeReportSource(ReportSource):
 
     async def discover(
         self,
-        type_external_id: str,
+        type_code: str,
         since: date,
         until: date,
         ticker: str | None = None,
     ) -> AsyncIterator[DiscoveredReport]:
         for item in self._items:
-            if item.type_external_id != type_external_id:
+            if item.type_code != type_code:
                 continue
             if ticker and item.ticker != ticker:
                 continue

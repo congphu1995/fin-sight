@@ -32,11 +32,9 @@ async def _seed_source_and_type(session) -> tuple[Source, ReportType]:
     await session.flush()
     rt = ReportType(
         source_id=src.id,
-        external_id="58",
-        code="phan-tich-doanh-nghiep",
+        code="company",
         name="Phân tích doanh nghiệp",
         ticker_indexed=True,
-        extraction_schema="company",
         enabled=True,
     )
     session.add(rt)

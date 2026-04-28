@@ -19,11 +19,11 @@ from typing import ClassVar
 @dataclass
 class DiscoveredReport:
     """A row produced by `discover()` — enough to upsert into `reports` and later
-    fetch the PDF. Source-specific identifiers stay as strings (no source-specific
-    fields leak into the orchestrator)."""
+    fetch the PDF. The crawler is responsible for translating our universal
+    `type_code` (e.g. 'company') into whatever the source's API expects."""
 
     source_code: str
-    type_external_id: str
+    type_code: str
     external_id: str
     ticker: str | None
     title: str
@@ -41,15 +41,17 @@ class ReportSource(ABC):
     @abstractmethod
     def discover(
         self,
-        type_external_id: str,
+        type_code: str,
         since: date,
         until: date,
         ticker: str | None = None,
     ) -> AsyncIterator[DiscoveredReport]:
         """Yield every report this source has for the given type within
-        [since, until], optionally filtered by ticker. Implementations must
-        not raise on transient errors — they should retry internally and yield
-        what they got, OR raise CrawlerError if a hard stop is needed."""
+        [since, until], optionally filtered by ticker. `type_code` is our
+        universal slug (e.g. 'company'); the crawler maps it internally to
+        whatever the source's API requires. Implementations must not raise on
+        transient errors — they should retry internally and yield what they
+        got, OR raise CrawlerError if a hard stop is needed."""
 
     @abstractmethod
     async def fetch_pdf(self, report: DiscoveredReport) -> bytes:

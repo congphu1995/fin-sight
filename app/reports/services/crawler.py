@@ -38,7 +38,7 @@ class CrawlerService:
         self._logger.info(
             "crawler.discover.start",
             source=self._source.code,
-            report_type=self._report_type.external_id,
+            report_type=self._report_type.code,
             since=since.isoformat(),
             until=until.isoformat(),
             ticker=ticker,
@@ -46,7 +46,7 @@ class CrawlerService:
 
         inserted = 0
         async for found in self._crawler.discover(
-            self._report_type.external_id, since, until, ticker=ticker
+            self._report_type.code, since, until, ticker=ticker
         ):
             if await self._upsert(found):
                 inserted += 1
@@ -55,7 +55,7 @@ class CrawlerService:
         self._logger.info(
             "crawler.discover.done",
             source=self._source.code,
-            report_type=self._report_type.external_id,
+            report_type=self._report_type.code,
             inserted=inserted,
         )
         return inserted
@@ -88,13 +88,13 @@ async def get_source(session: AsyncSession, code: str) -> Source | None:
 
 
 async def get_report_type(
-    session: AsyncSession, source_id: int, external_id: str
+    session: AsyncSession, source_id: int, code: str
 ) -> ReportType | None:
     return (
         await session.execute(
             select(ReportType).where(
                 ReportType.source_id == source_id,
-                ReportType.external_id == external_id,
+                ReportType.code == code,
             )
         )
     ).scalar_one_or_none()

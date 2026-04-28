@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 class ReportOut(BaseModel):
     id: UUID
     source_code: str
-    report_type_external_id: str
+    report_type_code: str
     external_id: str
     ticker: str | None = None
     title: str

@@ -6,7 +6,8 @@ extraction key:
     1. Create a folder `extraction/<name>/` with `schema.py` (Pydantic class with
        `__extraction_key__` and `__version__`) and `prompt.md`.
     2. Add one import + one dict entry below.
-    3. Point `report_types.extraction_schema = '<key>'` in the DB.
+    3. Point `report_types.code = '<key>'` in the DB (and add a row in the
+       crawler's TYPE_FILTER mapping if the source needs a per-type API value).
 
 The folder name SHOULD match `__extraction_key__` for navigability — enforced by
 `tests/unit/reports/test_extraction_registry.py`.
