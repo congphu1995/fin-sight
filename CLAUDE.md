@@ -40,7 +40,7 @@ uv run alembic revision --autogenerate -m "description"
 uv run alembic upgrade head
 ```
 
-A `.env` is required (copy from `.env.example`). `Settings` (`app/core/config.py`) reads it via `pydantic-settings`. Without a real `GEMINI_API_KEY` the chat endpoint will 502; without Postgres the lifespan logs a warning but the app still starts and the chat endpoint still works (DB is currently scaffolded but unused).
+A `.env` is required (copy from `.env.example`). `Settings` (`app/core/config.py`) reads it via `pydantic-settings`. `GEMINI_API_KEY` must be set to **anything non-empty** for the app to serve `/api/v1/agent/...` at all (eager `GeminiClient` init — see Gotchas); a fake key lets routes wire up but real LLM calls then return 502. Postgres is required for the agent layer (it persists conversations + messages); the lifespan only logs a warning if Postgres is unavailable, but `POST /api/v1/agent/{agent_key}/conversations` will fail.
 
 ## Architecture
 
@@ -54,11 +54,11 @@ The lifespan in `app/main.py` reuses the same `get_engine()` singleton from `dep
 
 ### Exceptions
 
-Domain exceptions live in `app/core/exceptions.py`, **not** co-located with the code that raises them. `GeminiClient.generate` raises `LLMError`; the chat route catches it and maps to `HTTPException(502)`. New domain exceptions go in `core/exceptions.py` and are imported where needed.
+Domain exceptions live in `app/core/exceptions.py`, **not** co-located with the code that raises them. `GeminiClient.generate` raises `LLMError`; the agent route catches it and maps to `HTTPException(502)`. New domain exceptions go in `core/exceptions.py` and are imported where needed.
 
 ### Feature layout — schemas vs. models
 
-The codebase is feature-based: `app/chat/`, `app/health/`, `app/reports/`. Inside each feature:
+The codebase is feature-based: `app/agent/`, `app/health/`, `app/reports/`. Inside each feature:
 
 - `schemas.py` — Pydantic models for API request/response. This is what FastAPI serializes.
 - `models.py` (when the feature owns tables) — SQLAlchemy ORM mapped to `app/models/base.py:Base`. Alembic picks up everything bound to `Base.metadata` via `target_metadata = Base.metadata` in `alembic/env.py`.
@@ -94,6 +94,34 @@ Two registries, both **explicit**:
 
 Full design context: `docs/reports-pipeline.md` (gitignored, local only).
 
+### Agent layer (`app/agent/`)
+
+Multi-turn agentic conversations, designed for **N agents** sharing one
+runtime. Route → `ConversationService` → per-spec `AgentLoop` →
+`GeminiClient.generate_with_tools`. Each user/assistant/tool step persists
+as a row in `messages`. `conversations.agent_key` ties a conversation to
+the spec that started it; subsequent turns always run on the same agent.
+
+Three explicit registries:
+- `app/agent/tools/` — `Tool` ABC + `@register` decorator. The shared tool
+  catalog. New tool = subclass + `@register` + import in `tools/__init__.py`.
+- `app/agent/agents/` — `AgentSpec` (frozen dataclass) + `register_agent(...)`.
+  Each `<key>/` folder pairs `spec.py` (builds + registers the spec) with
+  `prompt.md` (the system instruction). The spec declares: `key`,
+  `description`, `system_prompt`, `tool_names` (allowlist from the catalog),
+  `max_steps`, `per_tool_timeout_s`, `per_turn_timeout_s`,
+  `enable_google_search`. New agent = `mkdir agents/<key>/` + `spec.py` +
+  `prompt.md` + 1 import in `agents/__init__.py`.
+- `app/agent/runtime/loop.py` — the loop itself is **agent-agnostic**.
+  Defaults (`MAX_STEPS=10`, per-tool 45s, per-turn 180s) live there; per-spec
+  overrides come from `AgentSpec`. On overflow `AgentLoopExceededError` →
+  HTTP 504.
+
+Routes are `/api/v1/agent/{agent_key}/...` — the path-param resolves to an
+`AgentSpec` via `get_agent_spec`, returning 404 for unknown keys. A
+discovery endpoint `GET /api/v1/agent/agents` lists registered agents.
+The current Q&A agent is keyed `qa` (`app/agent/agents/qa/`).
+
 ### Alembic
 
 Async template. `alembic/env.py` calls `config.set_main_option("sqlalchemy.url", get_settings().database_url)`, so the `sqlalchemy.url` field in `alembic.ini` is intentionally blank. Don't set it there — change `DATABASE_URL` in `.env`.
@@ -123,7 +151,7 @@ Rules:
 
 Run a single test:
 ```bash
-uv run pytest tests/integration/chat/test_chat.py::test_chat_returns_fake_answer -v
+uv run pytest tests/integration/agent/test_conversation_routes.py::test_create_conversation_returns_id_and_agent_key -v
 uv run pytest tests/unit -q                  # unit only
 uv run pytest tests/integration -q           # integration only
 ```
@@ -135,6 +163,19 @@ uv run pytest tests/integration -q           # integration only
   `response_schema` to `GeminiClient.generate_from_pdf`, use `list[NamedMetric]`
   (where `NamedMetric{name: str, value: float}`) instead of `dict[str, float]`.
   See `app/reports/extraction/company/schema.py` for the pattern.
+
+- **All `/api/v1/agent/...` routes need a real `GEMINI_API_KEY`**, even ones that
+  don't call the LLM (e.g. `POST /conversations`). `get_conversation_service`
+  depends on `get_gemini`, which eagerly constructs `GeminiClient` per request;
+  the SDK constructor raises `ValueError` on an empty key. Catches misconfig
+  early — but means you can't smoke-test the routing layer without the key.
+
+- **Gemini function-calling requires `thought_signature` on every `function_call` part you re-send.**
+  Within an agent turn, append the model's raw `Content` (`response.candidates[0].content`)
+  verbatim — it carries the signature. Across turns, drop persisted
+  function_call/response rows entirely; the prior assistant *text* already
+  summarises what those tools returned. See `app/agent/runtime/loop.py` and
+  `app/core/llm/gemini.py:_parse_tool_use_response`.
 
 ## Commit messages
 
@@ -155,6 +196,6 @@ Common types:
 Guidelines:
 - **Title is the why-shaped summary**, not a file list. `feat: add request-ID propagation` not `feat: add middleware.py`.
 - **Imperative mood** ("add", "fix", "remove" — not "added"/"adds").
-- **Body only when needed** — if the title is enough, skip the body. When you do add one, explain *why*, not *what* (the diff shows what).
+- **Default to title only.** No body for routine changes. Add a body only when the title can't carry the *why* — and even then, keep it short.
 - **One logical change per commit.** If you can describe two unrelated things in the message, split it.
 - Don't include "AI generated" / co-author trailers unless explicitly asked.
