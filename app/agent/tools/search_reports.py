@@ -16,6 +16,22 @@ _BASE_DESCRIPTION = (
     "find a report_id."
 )
 
+# Base descriptions for facets that get top-N values appended at startup by
+# `refresh_facet_hints`. Stored as constants so we can recompose without
+# accumulating stale value lists across reloads.
+_BASE_FIELD_DESC: dict[str, str] = {
+    "industry_name": (
+        "Sector for report_type_code='industry' ONLY (e.g. 'Steel', 'Banks', "
+        "'Real Estate'). Do NOT use this with thematic reports — use `topic` "
+        "for those. Free-text ILIKE."
+    ),
+    "topic": (
+        "Theme for report_type_code='thematic' ONLY (e.g. 'EV transition', "
+        "'VN-US trade'). Do NOT use this for industry sectors — use "
+        "`industry_name` for those. Free-text ILIKE."
+    ),
+}
+
 
 class SearchReportsArgs(BaseModel):
     ticker: str | None = Field(default=None, description="Stock ticker, e.g. 'HPG'")
@@ -30,18 +46,11 @@ class SearchReportsArgs(BaseModel):
     until: date | None = Field(default=None, description="Latest published_at (inclusive)")
     industry_name: str | None = Field(
         default=None,
-        description=(
-            "Industry name (free-text ILIKE match against the LLM-extracted "
-            "industry on industry-type reports). Call list_facets(facet="
-            "'industry_name') first if unsure of the catalogue's vocabulary."
-        ),
+        description=_BASE_FIELD_DESC["industry_name"],
     )
     topic: str | None = Field(
         default=None,
-        description=(
-            "Thematic topic (free-text ILIKE match). Call list_facets(facet='topic') "
-            "first if unsure."
-        ),
+        description=_BASE_FIELD_DESC["topic"],
     )
     outlook: Literal["POSITIVE", "NEUTRAL", "NEGATIVE"] | None = Field(
         default=None,
@@ -165,31 +174,49 @@ class SearchReports(Tool):
         }
 
 
-async def refresh_industry_hint(session_factory: async_sessionmaker, top_n: int = 30) -> int:
-    """Query the top-N industry_name values and patch them into this tool's
-    description so the agent sees the catalogue's actual vocabulary in the
-    Gemini function-call schema. Returns the number of industries baked in.
+async def refresh_facet_hints(
+    session_factory: async_sessionmaker, top_n: int = 30
+) -> dict[str, int]:
+    """Bake the catalogue's actual vocabulary into per-field descriptions on
+    `SearchReportsArgs` so Gemini's tool-use planner sees concrete values when
+    routing free-text filters (e.g. it picks `industry_name='Steel'` instead of
+    `topic='thép'` because only `industry_name` carries known values).
+
+    Mutates `SearchReportsArgs.model_fields[name].description` and rebuilds the
+    Pydantic core schema so the next `model_json_schema()` call reflects it.
+    The agent loop reads `args_schema.model_json_schema()` per turn, so the
+    rebuild is picked up without restarting.
 
     Called from app.main lifespan once per process. Failures are logged by the
-    caller and never fatal — the tool falls back to the base description.
+    caller and never fatal — fields fall back to their base descriptions.
     """
+    facet_columns = {
+        "industry_name": ReportExtraction.industry_name,
+        "topic": ReportExtraction.topic,
+    }
+    counts: dict[str, int] = {}
     async with session_factory() as session:
-        stmt = (
-            select(ReportExtraction.industry_name, func.count().label("c"))
-            .where(ReportExtraction.industry_name.is_not(None))
-            .group_by(ReportExtraction.industry_name)
-            .order_by(func.count().desc())
-            .limit(top_n)
-        )
-        rows = (await session.execute(stmt)).all()
-    names = [r[0] for r in rows if r[0]]
-    if names:
-        SearchReports.description = (
-            _BASE_DESCRIPTION
-            + " Known industry_name values in the catalogue (most frequent first): "
-            + ", ".join(names)
-            + ". If the user's term doesn't match, call list_facets first."
-        )
-    else:
-        SearchReports.description = _BASE_DESCRIPTION
-    return len(names)
+        for name, col in facet_columns.items():
+            stmt = (
+                select(col, func.count().label("c"))
+                .where(col.is_not(None))
+                .group_by(col)
+                .order_by(func.count().desc())
+                .limit(top_n)
+            )
+            rows = (await session.execute(stmt)).all()
+            values = [r[0] for r in rows if r[0]]
+            base = _BASE_FIELD_DESC[name]
+            if values:
+                desc = (
+                    f"{base} Known values in the catalogue (most frequent first): "
+                    + ", ".join(values)
+                    + ". If none match, call list_facets first."
+                )
+            else:
+                desc = base
+            SearchReportsArgs.model_fields[name].description = desc
+            counts[name] = len(values)
+
+    SearchReportsArgs.model_rebuild(force=True)
+    return counts

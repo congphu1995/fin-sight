@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.agent.tools.search_reports import refresh_industry_hint
+from app.agent.tools.search_reports import refresh_facet_hints
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.logging.middleware import request_context_middleware
@@ -29,10 +29,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("startup.db.unavailable", error=str(exc))
 
     try:
-        n = await refresh_industry_hint(get_session_factory())
-        logger.info("startup.industry_hint.ok", count=n)
+        counts = await refresh_facet_hints(get_session_factory())
+        logger.info("startup.facet_hints.ok", **counts)
     except Exception as exc:
-        logger.warning("startup.industry_hint.failed", error=str(exc))
+        logger.warning("startup.facet_hints.failed", error=str(exc))
 
     logger.info("startup.complete", env=settings.env)
     try:
