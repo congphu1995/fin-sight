@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     CHAR,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -22,7 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -113,9 +114,20 @@ class ReportExtraction(Base):
     horizon: Mapped[str | None] = mapped_column(String(32))
     extras: Mapped[dict | None] = mapped_column(JSONB)
     raw_response: Mapped[dict | None] = mapped_column(JSONB)
+    # Promoted facets — derived from the type-specific schema by ExtractorService._extract_facets.
+    # NULL when the source schema doesn't have the corresponding field.
+    industry_name: Mapped[str | None] = mapped_column(String(128), index=True)
+    topic: Mapped[str | None] = mapped_column(String(256), index=True)
+    outlook: Mapped[str | None] = mapped_column(String(16), index=True)
+    period: Mapped[str | None] = mapped_column(String(64))
+    mentioned_tickers: Mapped[list[str] | None] = mapped_column(ARRAY(String(16)))
 
     __table_args__ = (
         UniqueConstraint("report_id", "prompt_version", name="uq_extractions_report_prompt"),
+        CheckConstraint(
+            "outlook IS NULL OR outlook IN ('POSITIVE','NEUTRAL','NEGATIVE')",
+            name="ck_extractions_outlook",
+        ),
     )
 
 
