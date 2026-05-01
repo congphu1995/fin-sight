@@ -12,3 +12,7 @@ class StorageError(Exception):
 
 class ExtractionError(Exception):
     """Raised when LLM extraction fails to produce a valid response."""
+
+
+class AgentLoopExceededError(Exception):
+    """Raised when the chat agent loop exceeds its step or wall-clock budget."""

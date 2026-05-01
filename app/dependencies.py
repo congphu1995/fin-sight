@@ -8,7 +8,6 @@ import structlog
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.chat.service import ChatService
 from app.core.config import Settings, get_settings
 from app.core.database.session import make_engine, make_session_factory
 from app.core.llm.gemini import GeminiClient
@@ -60,10 +59,3 @@ def get_minio_client() -> MinioClient:
 
 def get_logger() -> structlog.stdlib.BoundLogger:
     return structlog.get_logger()
-
-
-def get_chat_service(
-    gemini: Annotated[GeminiClient, Depends(get_gemini)],
-    logger: Annotated[structlog.stdlib.BoundLogger, Depends(get_logger)],
-) -> ChatService:
-    return ChatService(gemini=gemini, logger=logger)
