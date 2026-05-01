@@ -8,6 +8,7 @@ from app.agent.tools.ask_report_pdf import AskReportPdf
 from app.agent.tools.base import TOOL_REGISTRY, Tool, ToolContext, register
 from app.agent.tools.fetch_url import FetchUrl
 from app.agent.tools.get_report_metrics import GetReportMetrics
+from app.agent.tools.list_facets import ListFacets
 from app.agent.tools.search_reports import SearchReports
 from app.agent.tools.web_search import WebSearch
 
@@ -18,6 +19,7 @@ __all__ = [
     "register",
     "SearchReports",
     "GetReportMetrics",
+    "ListFacets",
     "WebSearch",
     "FetchUrl",
     "AskReportPdf",
