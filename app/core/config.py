@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     minio_bucket: str = "finsight-reports"
     minio_secure: bool = False
 
+    cors_allow_origins: list[str] = ["http://localhost:3000"]
+
     crawl_user_agent: str = (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
