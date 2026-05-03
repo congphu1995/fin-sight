@@ -22,10 +22,16 @@ class NamedMetric(BaseModel):
 
 class IndustryExtraction(BaseModel):
     __extraction_key__: ClassVar[str] = "industry"
-    __version__: ClassVar[str] = "v1"
+    __version__: ClassVar[str] = "v2"
 
     summary: str
-    industry: str = Field(..., description="Industry name as the report uses it")
+    industry: str = Field(
+        ...,
+        description=(
+            "Canonical English sector label from the prompt's allowed list "
+            "(Steel, Banking, Real Estate, ...). Use 'Other' only when none fit."
+        ),
+    )
     outlook: Outlook | None = None
     top_picks: list[TopPick] = Field(default_factory=list)
     key_drivers: list[str] = Field(default_factory=list, max_length=5)

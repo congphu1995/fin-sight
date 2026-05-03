@@ -20,6 +20,7 @@ from app.core.exceptions import ExtractionError, LLMError, StorageError
 from app.core.llm.gemini import GeminiClient
 from app.core.storage.minio_client import MinioClientProtocol
 from app.reports.extraction import EXTRACTION_REGISTRY
+from app.reports.extraction.industry.aliases import canonicalize_industry
 from app.reports.models import Report, ReportExtraction, ReportType, Source
 
 # Hot columns we promote out of the schema's JSON to top-level columns when present.
@@ -30,6 +31,83 @@ _HOT_FIELDS = (
     "target_currency",
     "horizon",
 )
+
+_OUTLOOK_VALUES = {"POSITIVE", "NEUTRAL", "NEGATIVE"}
+
+# Per-schema payload keys that `_extract_facets` consumes into typed columns.
+# These are stripped from `extras` so the JSONB doesn't duplicate the columns.
+# Only scalar keys are listed — array-of-object keys (top_picks, affected_tickers,
+# top_signals, index_outlook) stay in extras because mentioned_tickers is a
+# lossy projection (only ticker/symbol, not target prices, rationales, etc.).
+# Invariant guarded by tests/unit/reports/test_extractor.py::test_extras_excludes_promoted_keys.
+_FACET_STRIP_KEYS: dict[str, frozenset[str]] = {
+    "industry":  frozenset({"industry", "outlook"}),
+    "macro":     frozenset({"period", "market_outlook"}),
+    "technical": frozenset({"period"}),
+    "thematic":  frozenset({"topic"}),
+    "company":   frozenset(),
+    "generic":   frozenset(),
+}
+
+
+def _extract_facets(payload: dict, schema_key: str, report_ticker: str | None) -> dict:
+    """Map a parsed extraction payload to the typed facet columns on
+    `report_extractions` (industry_name, topic, outlook, period, mentioned_tickers).
+
+    Returns only the keys we want to write — any column not derivable from the
+    schema is simply absent and stays NULL in the DB.
+    """
+    out: dict = {}
+    tickers: list[str] = []
+
+    if schema_key == "industry":
+        if (v := canonicalize_industry(payload.get("industry"))):
+            out["industry_name"] = v
+        if (v := payload.get("outlook")) in _OUTLOOK_VALUES:
+            out["outlook"] = v
+        for tp in payload.get("top_picks") or ():
+            if isinstance(tp, dict) and (t := tp.get("ticker")):
+                tickers.append(t)
+
+    elif schema_key == "macro":
+        if (v := payload.get("period")):
+            out["period"] = v
+        if (v := payload.get("market_outlook")) in _OUTLOOK_VALUES:
+            out["outlook"] = v
+
+    elif schema_key == "technical":
+        if (v := payload.get("period")):
+            out["period"] = v
+        for sig in payload.get("top_signals") or ():
+            if isinstance(sig, dict) and (t := sig.get("ticker")):
+                tickers.append(t)
+        for idx in payload.get("index_outlook") or ():
+            if isinstance(idx, dict) and (s := idx.get("symbol")):
+                tickers.append(s)
+
+    elif schema_key == "thematic":
+        if (v := payload.get("topic")):
+            out["topic"] = v
+        for at in payload.get("affected_tickers") or ():
+            if isinstance(at, dict) and (t := at.get("ticker")):
+                tickers.append(t)
+
+    elif schema_key == "company":
+        if report_ticker:
+            tickers.append(report_ticker)
+
+    if tickers:
+        # Normalize and dedupe while preserving first-seen order.
+        seen: set[str] = set()
+        normed: list[str] = []
+        for t in tickers:
+            n = t.strip().upper()
+            if n and n not in seen:
+                seen.add(n)
+                normed.append(n)
+        if normed:
+            out["mentioned_tickers"] = normed
+    return out
 
 
 class ExtractorService:
@@ -120,7 +198,9 @@ class ExtractorService:
         # Schemas spell horizon as "time_horizon" — promote it.
         if "time_horizon" in payload and "horizon" not in hot:
             hot["horizon"] = _coerce_hot_value("horizon", payload.get("time_horizon"))
-        extras = {k: v for k, v in payload.items() if k not in _HOT_FIELDS and k != "time_horizon"}
+        strip = set(_HOT_FIELDS) | {"time_horizon"} | _FACET_STRIP_KEYS.get(defn.key, frozenset())
+        extras = {k: v for k, v in payload.items() if k not in strip}
+        facets = _extract_facets(payload, defn.key, report.ticker)
 
         stmt = (
             pg_insert(ReportExtraction)
@@ -135,6 +215,7 @@ class ExtractorService:
                 horizon=hot.get("horizon"),
                 extras=extras,
                 raw_response=payload,
+                **facets,
             )
             .on_conflict_do_nothing(index_elements=["report_id", "prompt_version"])
         )

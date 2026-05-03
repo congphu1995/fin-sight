@@ -16,6 +16,7 @@ QA_AGENT = register_agent(
         system_prompt=_PROMPT,
         tool_names=(
             "search_reports",
+            "list_facets",
             "get_report_metrics",
             "ask_report_pdf",
             "web_search",
