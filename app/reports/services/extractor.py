@@ -20,6 +20,7 @@ from app.core.exceptions import ExtractionError, LLMError, StorageError
 from app.core.llm.gemini import GeminiClient
 from app.core.storage.minio_client import MinioClientProtocol
 from app.reports.extraction import EXTRACTION_REGISTRY
+from app.reports.extraction.industry.aliases import canonicalize_industry
 from app.reports.models import Report, ReportExtraction, ReportType, Source
 
 # Hot columns we promote out of the schema's JSON to top-level columns when present.
@@ -33,6 +34,21 @@ _HOT_FIELDS = (
 
 _OUTLOOK_VALUES = {"POSITIVE", "NEUTRAL", "NEGATIVE"}
 
+# Per-schema payload keys that `_extract_facets` consumes into typed columns.
+# These are stripped from `extras` so the JSONB doesn't duplicate the columns.
+# Only scalar keys are listed — array-of-object keys (top_picks, affected_tickers,
+# top_signals, index_outlook) stay in extras because mentioned_tickers is a
+# lossy projection (only ticker/symbol, not target prices, rationales, etc.).
+# Invariant guarded by tests/unit/reports/test_extractor.py::test_extras_excludes_promoted_keys.
+_FACET_STRIP_KEYS: dict[str, frozenset[str]] = {
+    "industry":  frozenset({"industry", "outlook"}),
+    "macro":     frozenset({"period", "market_outlook"}),
+    "technical": frozenset({"period"}),
+    "thematic":  frozenset({"topic"}),
+    "company":   frozenset(),
+    "generic":   frozenset(),
+}
+
 
 def _extract_facets(payload: dict, schema_key: str, report_ticker: str | None) -> dict:
     """Map a parsed extraction payload to the typed facet columns on
@@ -45,7 +61,7 @@ def _extract_facets(payload: dict, schema_key: str, report_ticker: str | None) -
     tickers: list[str] = []
 
     if schema_key == "industry":
-        if (v := payload.get("industry")):
+        if (v := canonicalize_industry(payload.get("industry"))):
             out["industry_name"] = v
         if (v := payload.get("outlook")) in _OUTLOOK_VALUES:
             out["outlook"] = v
@@ -182,7 +198,8 @@ class ExtractorService:
         # Schemas spell horizon as "time_horizon" — promote it.
         if "time_horizon" in payload and "horizon" not in hot:
             hot["horizon"] = _coerce_hot_value("horizon", payload.get("time_horizon"))
-        extras = {k: v for k, v in payload.items() if k not in _HOT_FIELDS and k != "time_horizon"}
+        strip = set(_HOT_FIELDS) | {"time_horizon"} | _FACET_STRIP_KEYS.get(defn.key, frozenset())
+        extras = {k: v for k, v in payload.items() if k not in strip}
         facets = _extract_facets(payload, defn.key, report.ticker)
 
         stmt = (
