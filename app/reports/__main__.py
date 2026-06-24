@@ -1,10 +1,10 @@
 """CLI shell for the reports pipeline.
 
-    python -m app.reports                            # full pipeline, all enabled (source, type)
-    python -m app.reports --source vietstock         # one source
-    python -m app.reports --type company --ticker HPG
-    python -m app.reports --skip-extraction          # discover + download only
-    python -m app.reports --only=extract             # re-extract pending downloads
+python -m app.reports                            # full pipeline, all enabled (source, type)
+python -m app.reports --source vietstock         # one source
+python -m app.reports --type company --ticker HPG
+python -m app.reports --skip-extraction          # discover + download only
+python -m app.reports --only=extract             # re-extract pending downloads
 """
 
 from __future__ import annotations

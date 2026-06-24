@@ -56,9 +56,7 @@ class ReportType(Base):
     ticker_indexed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    __table_args__ = (
-        UniqueConstraint("source_id", "code", name="uq_report_types_source_code"),
-    )
+    __table_args__ = (UniqueConstraint("source_id", "code", name="uq_report_types_source_code"),)
 
 
 class Report(Base):

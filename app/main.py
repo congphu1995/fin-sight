@@ -3,15 +3,25 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.agent.tools.search_reports import refresh_facet_hints
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.logging.middleware import request_context_middleware
 from app.core.logging.setup import configure_logging
-from app.dependencies import get_engine, get_session_factory
+from app.dependencies import get_engine
+from app.mcp import build_mcp_server
+from app.mcp.auth import BearerAuthMiddleware
+from app.scheduler import ReportsScheduler
+
+# Built at import: the MCP sub-app (creates the session manager run in the lifespan)
+# and an optional static-bearer guard on its routes.
+_settings = get_settings()
+_mcp_server = build_mcp_server(_settings)
+_mcp_app = _mcp_server.streamable_http_app()
+_mcp_token = _settings.mcp_auth_token.get_secret_value()
+if _mcp_token:
+    _mcp_app.add_middleware(BearerAuthMiddleware, token=_mcp_token)
 
 
 @asynccontextmanager
@@ -21,38 +31,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = structlog.get_logger()
 
     engine = get_engine()
-    db_ok = False
     try:
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
         logger.info("startup.db.ok")
-        db_ok = True
     except Exception as exc:
         logger.warning("startup.db.unavailable", error=str(exc))
 
-    if db_ok:
-        try:
-            counts = await refresh_facet_hints(get_session_factory())
-            logger.info("startup.facet_hints.ok", **counts)
-        except Exception as exc:
-            logger.warning("startup.facet_hints.failed", error=str(exc))
+    scheduler = ReportsScheduler(settings, logger)
+    scheduler.start()
 
-    logger.info("startup.complete", env=settings.env)
+    logger.info("startup.complete", env=settings.env, mcp_path=settings.mcp_path)
     try:
-        yield
+        # Mounting alone does NOT start the MCP transport — its session manager
+        # must run inside the parent app's lifespan.
+        async with _mcp_server.session_manager.run():
+            yield
     finally:
+        await scheduler.stop()
         await engine.dispose()
         get_engine.cache_clear()
         logger.info("shutdown.complete")
 
 
 app = FastAPI(title="FinSight", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_settings().cors_allow_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 app.middleware("http")(request_context_middleware)
 app.include_router(api_router)
+app.mount(_settings.mcp_path, _mcp_app)

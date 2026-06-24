@@ -43,9 +43,7 @@ def test_facets_industry_invalid_outlook_dropped() -> None:
 
 
 def test_facets_macro() -> None:
-    out = _extract_facets(
-        {"period": "Q1 2026", "market_outlook": "NEUTRAL"}, "macro", None
-    )
+    out = _extract_facets({"period": "Q1 2026", "market_outlook": "NEUTRAL"}, "macro", None)
     assert out == {"period": "Q1 2026", "outlook": "NEUTRAL"}
 
 
@@ -91,9 +89,7 @@ def test_facets_industry_empty_top_picks() -> None:
 def test_facets_industry_canonicalizes_vietnamese() -> None:
     """LLM occasionally returns the Vietnamese form despite the prompt; the
     runtime backstop maps it to the canonical English label."""
-    assert _extract_facets({"industry": "Thép"}, "industry", None) == {
-        "industry_name": "Steel"
-    }
+    assert _extract_facets({"industry": "Thép"}, "industry", None) == {"industry_name": "Steel"}
     assert _extract_facets({"industry": "Ngân hàng"}, "industry", None) == {
         "industry_name": "Banking"
     }
@@ -102,9 +98,7 @@ def test_facets_industry_canonicalizes_vietnamese() -> None:
         "industry_name": "Banking"
     }
     # English near-miss ("Banks" → "Banking").
-    assert _extract_facets({"industry": "Banks"}, "industry", None) == {
-        "industry_name": "Banking"
-    }
+    assert _extract_facets({"industry": "Banks"}, "industry", None) == {"industry_name": "Banking"}
 
 
 def test_facets_industry_unknown_passthrough() -> None:
@@ -181,9 +175,7 @@ _STRIP_FIXTURES: dict[str, tuple[dict, set[str]]] = {
 @pytest.mark.parametrize("schema_key", sorted(_FACET_STRIP_KEYS))
 def test_extras_excludes_promoted_keys(schema_key: str) -> None:
     payload, expected_kept = _STRIP_FIXTURES[schema_key]
-    strip = (
-        set(_HOT_FIELDS) | {"time_horizon"} | _FACET_STRIP_KEYS.get(schema_key, frozenset())
-    )
+    strip = set(_HOT_FIELDS) | {"time_horizon"} | _FACET_STRIP_KEYS.get(schema_key, frozenset())
     extras = {k: v for k, v in payload.items() if k not in strip}
 
     for promoted in _FACET_STRIP_KEYS[schema_key]:

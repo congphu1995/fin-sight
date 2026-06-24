@@ -87,9 +87,7 @@ async def get_source(session: AsyncSession, code: str) -> Source | None:
     return (await session.execute(select(Source).where(Source.code == code))).scalar_one_or_none()
 
 
-async def get_report_type(
-    session: AsyncSession, source_id: int, code: str
-) -> ReportType | None:
+async def get_report_type(session: AsyncSession, source_id: int, code: str) -> ReportType | None:
     return (
         await session.execute(
             select(ReportType).where(

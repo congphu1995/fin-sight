@@ -102,9 +102,7 @@ class VietstockSource(ReportSource):
             except httpx.HTTPError as exc:
                 raise CrawlerError(f"vietstock listing page {page}: {exc}") from exc
 
-            cards = list(
-                _parse_cards(r.text, source_code=self.code, type_code=type_code)
-            )
+            cards = list(_parse_cards(r.text, source_code=self.code, type_code=type_code))
             if not cards:
                 return
             new = [c for c in cards if c.external_id not in seen]

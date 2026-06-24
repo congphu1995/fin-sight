@@ -97,9 +97,7 @@ class StorageService:
 
         # Content dedup: if another row already has this sha256, mark as duplicate.
         existing = await self._session.execute(
-            select(Report.id).where(
-                Report.pdf_sha256 == sha256, Report.id != report.id
-            )
+            select(Report.id).where(Report.pdf_sha256 == sha256, Report.id != report.id)
         )
         if existing.scalar_one_or_none() is not None:
             await self._session.execute(

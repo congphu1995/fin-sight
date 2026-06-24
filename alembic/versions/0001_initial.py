@@ -31,10 +31,10 @@ depends_on: str | Sequence[str] | None = None
 VIETSTOCK_TYPES = [
     # code, name, ticker_indexed
     ("technical", "Vietstock: Nghiên cứu - Phân tích", False),
-    ("macro",     "Vĩ mô - Chiến lược thị trường",     False),
-    ("industry",  "Phân tích ngành",                   False),
-    ("company",   "Phân tích doanh nghiệp",            True),
-    ("thematic",  "Báo cáo Chuyên đề",                 False),
+    ("macro", "Vĩ mô - Chiến lược thị trường", False),
+    ("industry", "Phân tích ngành", False),
+    ("company", "Phân tích doanh nghiệp", True),
+    ("thematic", "Báo cáo Chuyên đề", False),
 ]
 
 
@@ -80,9 +80,7 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column("source_id", sa.Integer(), sa.ForeignKey("sources.id"), nullable=False),
-        sa.Column(
-            "report_type_id", sa.Integer(), sa.ForeignKey("report_types.id"), nullable=False
-        ),
+        sa.Column("report_type_id", sa.Integer(), sa.ForeignKey("report_types.id"), nullable=False),
         sa.Column("external_id", sa.String(64), nullable=False),
         sa.Column("ticker", sa.String(16)),
         sa.Column("title", sa.Text(), nullable=False),
@@ -151,20 +149,14 @@ def upgrade() -> None:
         sa.Column("topic", sa.String(256), nullable=True),
         sa.Column("outlook", sa.String(16), nullable=True),
         sa.Column("period", sa.String(64), nullable=True),
-        sa.Column(
-            "mentioned_tickers", postgresql.ARRAY(sa.String(16)), nullable=True
-        ),
-        sa.UniqueConstraint(
-            "report_id", "prompt_version", name="uq_extractions_report_prompt"
-        ),
+        sa.Column("mentioned_tickers", postgresql.ARRAY(sa.String(16)), nullable=True),
+        sa.UniqueConstraint("report_id", "prompt_version", name="uq_extractions_report_prompt"),
         sa.CheckConstraint(
             "outlook IS NULL OR outlook IN ('POSITIVE','NEUTRAL','NEGATIVE')",
             name="ck_extractions_outlook",
         ),
     )
-    op.create_index(
-        "ix_report_extractions_industry_name", "report_extractions", ["industry_name"]
-    )
+    op.create_index("ix_report_extractions_industry_name", "report_extractions", ["industry_name"])
     op.create_index("ix_report_extractions_topic", "report_extractions", ["topic"])
     op.create_index("ix_report_extractions_outlook", "report_extractions", ["outlook"])
     op.create_index(
@@ -316,14 +308,10 @@ def downgrade() -> None:
 
     op.drop_table("crawl_runs")
 
-    op.drop_index(
-        "ix_report_extractions_mentioned_tickers", table_name="report_extractions"
-    )
+    op.drop_index("ix_report_extractions_mentioned_tickers", table_name="report_extractions")
     op.drop_index("ix_report_extractions_outlook", table_name="report_extractions")
     op.drop_index("ix_report_extractions_topic", table_name="report_extractions")
-    op.drop_index(
-        "ix_report_extractions_industry_name", table_name="report_extractions"
-    )
+    op.drop_index("ix_report_extractions_industry_name", table_name="report_extractions")
     op.drop_table("report_extractions")
 
     op.drop_index("ix_reports_status", table_name="reports")

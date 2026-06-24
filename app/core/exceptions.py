@@ -14,5 +14,5 @@ class ExtractionError(Exception):
     """Raised when LLM extraction fails to produce a valid response."""
 
 
-class AgentLoopExceededError(Exception):
-    """Raised when the chat agent loop exceeds its step or wall-clock budget."""
+class SsiError(Exception):
+    """Raised when an SSI FastConnect (Data or Trading) call fails."""
