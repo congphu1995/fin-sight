@@ -51,11 +51,12 @@ class Settings(BaseSettings):
     ssi_data_url: str = "https://fc-data.ssi.com.vn/"
 
     # --- SSI FastConnect Trading (Tier 2, personal account, READ-ONLY) ---
-    # https://fc-tradeapi.ssi.com.vn — PIN 2FA (twoFactorType=0) for headless login.
+    # https://fc-tradeapi.ssi.com.vn — reads use a read-scoped token (no 2FA code).
     ssi_trading_consumer_id: SecretStr = SecretStr("")
     ssi_trading_consumer_secret: SecretStr = SecretStr("")
     # Multi-line RSA PEM lives in a mounted file, not inline in env.
     ssi_trading_private_key_path: str = "secrets/ssi_private_key.pem"
+    # Optional: PIN is only for order placement (writes); unused in read-only mode.
     ssi_trading_pin: SecretStr = SecretStr("")
     ssi_trading_account_id: str = ""
     ssi_trading_url: str = "https://fc-tradeapi.ssi.com.vn/"
@@ -72,10 +73,11 @@ class Settings(BaseSettings):
 
     @property
     def ssi_trading_enabled(self) -> bool:
+        # Read-only access needs creds + account number. The PIN is only for
+        # order placement (which this app never does), so it isn't required.
         return bool(
             self.ssi_trading_consumer_id.get_secret_value()
             and self.ssi_trading_consumer_secret.get_secret_value()
-            and self.ssi_trading_pin.get_secret_value()
             and self.ssi_trading_account_id
         )
 
