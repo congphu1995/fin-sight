@@ -98,4 +98,5 @@ uv run ruff check . && uv run ruff format --check .
 uv run alembic revision --autogenerate -m "..."
 ```
 
-See [CLAUDE.md](CLAUDE.md) for architecture and conventions.
+See [CLAUDE.md](CLAUDE.md) for architecture and conventions, and [DEPLOY.md](DEPLOY.md) for
+containerized deployment + CD setup.
