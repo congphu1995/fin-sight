@@ -4,7 +4,6 @@ These tests don't hit Postgres; they use in-memory SQLite + the same ORM models
 to exercise the SQL paths (insert, dedup-by-sha256, status transitions).
 """
 
-
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 

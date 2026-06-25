@@ -47,10 +47,10 @@ def _build(folder: str, schema_cls: type[BaseModel]) -> ExtractionDef:
 
 
 EXTRACTION_REGISTRY: dict[str, ExtractionDef] = {
-    "company":   _build("company",   CompanyExtraction),
-    "industry":  _build("industry",  IndustryExtraction),
-    "macro":     _build("macro",     MacroExtraction),
+    "company": _build("company", CompanyExtraction),
+    "industry": _build("industry", IndustryExtraction),
+    "macro": _build("macro", MacroExtraction),
     "technical": _build("technical", TechnicalExtraction),
-    "thematic":  _build("thematic",  ThematicExtraction),
-    "generic":   _build("generic",   GenericExtraction),
+    "thematic": _build("thematic", ThematicExtraction),
+    "generic": _build("generic", GenericExtraction),
 }

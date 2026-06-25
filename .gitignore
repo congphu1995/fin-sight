@@ -11,6 +11,7 @@ wheels/
 
 # Env / secrets
 .env
+secrets/
 
 # Editor / IDE
 .idea/

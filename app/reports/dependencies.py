@@ -28,8 +28,5 @@ def make_http_client(settings: Settings) -> httpx.AsyncClient:
 def build_source(code: str, http: httpx.AsyncClient, settings: Settings) -> ReportSource:
     cls = SOURCE_REGISTRY.get(code)
     if cls is None:
-        raise RuntimeError(
-            f"unknown source code {code!r}; "
-            f"registered: {sorted(SOURCE_REGISTRY)}"
-        )
+        raise RuntimeError(f"unknown source code {code!r}; registered: {sorted(SOURCE_REGISTRY)}")
     return cls(http=http, request_delay_seconds=settings.crawl_request_delay_seconds)

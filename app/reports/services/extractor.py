@@ -41,12 +41,12 @@ _OUTLOOK_VALUES = {"POSITIVE", "NEUTRAL", "NEGATIVE"}
 # lossy projection (only ticker/symbol, not target prices, rationales, etc.).
 # Invariant guarded by tests/unit/reports/test_extractor.py::test_extras_excludes_promoted_keys.
 _FACET_STRIP_KEYS: dict[str, frozenset[str]] = {
-    "industry":  frozenset({"industry", "outlook"}),
-    "macro":     frozenset({"period", "market_outlook"}),
+    "industry": frozenset({"industry", "outlook"}),
+    "macro": frozenset({"period", "market_outlook"}),
     "technical": frozenset({"period"}),
-    "thematic":  frozenset({"topic"}),
-    "company":   frozenset(),
-    "generic":   frozenset(),
+    "thematic": frozenset({"topic"}),
+    "company": frozenset(),
+    "generic": frozenset(),
 }
 
 
@@ -61,7 +61,7 @@ def _extract_facets(payload: dict, schema_key: str, report_ticker: str | None) -
     tickers: list[str] = []
 
     if schema_key == "industry":
-        if (v := canonicalize_industry(payload.get("industry"))):
+        if v := canonicalize_industry(payload.get("industry")):
             out["industry_name"] = v
         if (v := payload.get("outlook")) in _OUTLOOK_VALUES:
             out["outlook"] = v
@@ -70,13 +70,13 @@ def _extract_facets(payload: dict, schema_key: str, report_ticker: str | None) -
                 tickers.append(t)
 
     elif schema_key == "macro":
-        if (v := payload.get("period")):
+        if v := payload.get("period"):
             out["period"] = v
         if (v := payload.get("market_outlook")) in _OUTLOOK_VALUES:
             out["outlook"] = v
 
     elif schema_key == "technical":
-        if (v := payload.get("period")):
+        if v := payload.get("period"):
             out["period"] = v
         for sig in payload.get("top_signals") or ():
             if isinstance(sig, dict) and (t := sig.get("ticker")):
@@ -86,7 +86,7 @@ def _extract_facets(payload: dict, schema_key: str, report_ticker: str | None) -
                 tickers.append(s)
 
     elif schema_key == "thematic":
-        if (v := payload.get("topic")):
+        if v := payload.get("topic"):
             out["topic"] = v
         for at in payload.get("affected_tickers") or ():
             if isinstance(at, dict) and (t := at.get("ticker")):
@@ -189,9 +189,7 @@ class ExtractorService:
             defn = EXTRACTION_REGISTRY["generic"]
 
         pdf_bytes = await self._minio.get_object(report.pdf_object_key)
-        parsed = await self._gemini.generate_from_pdf(
-            pdf_bytes, defn.prompt_template, defn.schema
-        )
+        parsed = await self._gemini.generate_from_pdf(pdf_bytes, defn.prompt_template, defn.schema)
         payload = parsed.model_dump(mode="json")
 
         hot = {f: _coerce_hot_value(f, payload.get(f)) for f in _HOT_FIELDS if f in payload}
