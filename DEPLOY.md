@@ -76,8 +76,11 @@ a per-owner static token in Mira's encrypted secret store (inline `headers` alon
 - **`ci.yml`** — on PRs and pushes to `master`: ruff, format check, unit tests, and a docker build
   (GitHub-hosted runners). This gates the deploy.
 - **`deploy.yml`** — on CI success on `master` (or manual *Run workflow*), on a `[self-hosted, macOS]`
-  runner: pulls `master` into the deploy clone, `docker compose up -d --build`, and smoke-checks
-  health from inside the container.
+  runner: pulls `master` into the deploy clone, `docker compose up -d --build`, smoke-checks health
+  from inside the container, then **restarts Mira** (`assistant-agent`) so it reconnects its finsight
+  MCP session — Mira holds MCP sessions for its process lifetime and doesn't auto-reconnect, so a
+  finsight redeploy otherwise leaves it with a stale session. (Best-effort: skipped if Mira isn't
+  running; a failed restart warns but doesn't fail the deploy.)
 
 ### One-time setup on the Mac (mirrors assistant-agent)
 

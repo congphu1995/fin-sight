@@ -35,13 +35,26 @@ jobs:
           git reset --hard FETCH_HEAD
           docker compose up -d --build
           # No published port — health-check from inside the container.
+          healthy=false
           for i in $(seq 1 40); do
             if docker exec finsight .venv/bin/python -c \
               "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" >/dev/null 2>&1; then
-              echo "healthy"; exit 0
+              healthy=true; break
             fi
             sleep 3
           done
-          echo "finsight did not become healthy in time" >&2
-          docker compose logs --tail=50 app >&2
-          exit 1
+          if [ "$healthy" != true ]; then
+            echo "finsight did not become healthy in time" >&2
+            docker compose logs --tail=50 app >&2
+            exit 1
+          fi
+          echo "finsight healthy"
+          # Reconnect Mira: it holds MCP sessions for its process lifetime and does NOT
+          # auto-reconnect, so a finsight redeploy leaves it with a stale session. Best-effort —
+          # never fail the fin-sight deploy if Mira is absent or its restart errors.
+          if docker ps --format '{{.Names}}' | grep -qx assistant-agent; then
+            echo "restarting assistant-agent to reconnect its finsight MCP session"
+            docker restart assistant-agent || echo "warning: assistant-agent restart failed" >&2
+          else
+            echo "assistant-agent not running; skipping Mira reconnect"
+          fi
