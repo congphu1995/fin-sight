@@ -23,7 +23,7 @@ All commands run through `uv` (Python 3.12).
 uv sync
 cp .env.example .env        # fill GEMINI_API_KEY; SSI_* + MCP_AUTH_TOKEN optional
 
-docker compose up -d        # postgres + minio (compose.yaml)
+(cd ../infra && docker compose up -d)   # shared Postgres + MinIO from ../infra (provisions finsight DB + bucket)
 uv run alembic upgrade head
 
 uv run uvicorn app.main:app --reload   # API on :8000, MCP at /mcp

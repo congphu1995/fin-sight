@@ -26,7 +26,7 @@ Two tiers:
 ```bash
 uv sync
 cp .env.example .env          # fill GEMINI_API_KEY; SSI_* + MCP_AUTH_TOKEN optional
-docker compose up -d          # postgres + minio
+(cd ../infra && docker compose up -d)   # shared Postgres + MinIO (auto-provisions finsight DB + bucket)
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload    # API on :8000, MCP at /mcp
 
