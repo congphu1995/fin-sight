@@ -1,0 +1,47 @@
+name: Deploy
+
+# Continuous deployment to the self-hosted Mac. Fires only after CI succeeds on main
+# (workflow_run gate), or manually via the Actions "Run workflow" button.
+#
+# One-time setup on the Mac (mirrors the assistant-agent deploy):
+#   - register a self-hosted [self-hosted, macOS] runner for this repo
+#   - clone to ~/srv/fin-sight and symlink .env + secrets/ to the dev checkout so creds
+#     have a single source of truth and `git reset --hard` never clobbers them
+#   - `cd ../infra && docker compose up -d` (owns the network + finsight DB + bucket)
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: [self-hosted, macOS]
+    permissions:
+      contents: read
+    steps:
+      # No actions/checkout: it would overwrite the deploy clone (which holds the symlinked
+      # .env / secrets). The job operates on the canonical clone directly.
+      - name: Pull main, rebuild, smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:$PATH"
+          cd ~/srv/fin-sight
+          git fetch -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
+          git reset --hard FETCH_HEAD
+          docker compose up -d --build
+          # No published port — health-check from inside the container.
+          for i in $(seq 1 40); do
+            if docker exec finsight .venv/bin/python -c \
+              "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" >/dev/null 2>&1; then
+              echo "healthy"; exit 0
+            fi
+            sleep 3
+          done
+          echo "finsight did not become healthy in time" >&2
+          docker compose logs --tail=50 app >&2
+          exit 1
