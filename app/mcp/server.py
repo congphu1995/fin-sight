@@ -9,6 +9,7 @@ approval card). SSI tools register only when their integration is configured.
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
 from app.core.config import Settings
@@ -71,7 +72,16 @@ async def _run(tool_name: str, args, render) -> str:
 
 
 def build_mcp_server(settings: Settings) -> FastMCP:
-    mcp = FastMCP(name="finsight", instructions=_INSTRUCTIONS, streamable_http_path="/")
+    # Disable the SDK's DNS-rebinding Host check: it defaults to localhost-only (the server
+    # host is 127.0.0.1), which 421s a client connecting by the container name `finsight:8000`.
+    # Safe here — fin-sight has no published port (private infra network) and is bearer-auth'd;
+    # that protection targets browser-reachable localhost servers, which this isn't.
+    mcp = FastMCP(
+        name="finsight",
+        instructions=_INSTRUCTIONS,
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    )
 
     # --- Tier 1: stored reports (always available) ---
     @mcp.tool(name="get_stock_analysis", annotations=READ_ONLY)

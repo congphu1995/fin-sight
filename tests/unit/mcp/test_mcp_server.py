@@ -64,3 +64,11 @@ async def test_lists_ssi_tools_when_enabled() -> None:
         names = {t.name for t in (await client.list_tools()).tools}
         assert names >= SSI_TOOLS
         assert names >= REPORT_TOOLS
+
+
+def test_dns_rebinding_protection_disabled() -> None:
+    # The server is reached by container name (finsight:8000), not localhost; the SDK's
+    # default Host check would 421 that. Must stay disabled (it 421'd Mira otherwise).
+    mcp = build_mcp_server(_disabled_settings())
+    ts = mcp.settings.transport_security
+    assert ts is not None and ts.enable_dns_rebinding_protection is False
