@@ -20,8 +20,6 @@ _settings = get_settings()
 _mcp_server = build_mcp_server(_settings)
 _mcp_app = _mcp_server.streamable_http_app()
 _mcp_token = _settings.mcp_auth_token.get_secret_value()
-if _mcp_token:
-    _mcp_app.add_middleware(BearerAuthMiddleware, token=_mcp_token)
 
 
 @asynccontextmanager
@@ -56,5 +54,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="FinSight", lifespan=lifespan)
 app.middleware("http")(request_context_middleware)
+# Guard the MCP routes (scoped to mcp_path so /healthz stays open). Added to the
+# main app so it runs ahead of the mounted MCP sub-app.
+if _mcp_token:
+    app.add_middleware(BearerAuthMiddleware, token=_mcp_token, path_prefix=_settings.mcp_path)
 app.include_router(api_router)
 app.mount(_settings.mcp_path, _mcp_app)
